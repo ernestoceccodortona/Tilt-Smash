@@ -156,7 +156,7 @@
         function startTimer() { timerInterval = setInterval(() => { timeLeft--; document.getElementById('timer-display').innerText = timeLeft; if (timeLeft <= 0) gameOver(); }, 1000); }
         function levelWin() { 
             currentLevel++; 
-            if (currentLevel % 4 === 0) addBall();
+            if (currentLevel % 5 === 0) addBall();
             if (isTimed) timeLeft += Math.max(2, 12 - currentLevel); 
             document.getElementById('lvl-num').innerText = currentLevel; 
             spawnLevel(getVpWidth(), getVpHeight()); 
