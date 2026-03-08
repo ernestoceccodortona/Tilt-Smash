@@ -18,7 +18,7 @@
         #timer-display { font-size: 3.5rem; font-weight: 200; letter-spacing: 4px; line-height: 1; }
         
         #pause-btn { position: absolute; top: 20px; left: 20px; z-index: 20; padding: 10px 20px; background: #333; border-radius: 20px; pointer-events: auto; cursor: pointer; font-size: 0.7rem; letter-spacing: 2px; }
-        #music-toggle { position: absolute; top: 20px; right: 20px; z-index: 20; width: 40px; height: 40px; background: #333; border-radius: 50%; pointer-events: auto; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
+        #music-toggle { position: fixed; top: 20px; right: 20px; z-index: 9999; width: 40px; height: 40px; background: #333; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; opacity: 0.3; }
 
         .menu { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #000; z-index: 100; text-align: center; pointer-events: auto; }
         h1 { font-weight: 100; letter-spacing: 12px; margin-bottom: 40px; text-transform: uppercase; }
@@ -28,13 +28,13 @@
 </head>
 <body>
 
+    <div id="music-toggle" onclick="toggleMusic()">♪</div>
     <div id="game-container">
         <div id="ui-layer">
             <div id="lvl-tag">Level <span id="lvl-num">1</span></div>
             <div id="timer-display">20</div>
         </div>
         <div id="pause-btn" style="display:none;" onclick="togglePause()">PAUSE</div>
-        <div id="music-toggle" onclick="toggleMusic()">♪</div>
 
         <div id="overlay" class="menu">
             <h1>TILT PONG</h1>
@@ -61,11 +61,30 @@
         let engine, render, runner, balls = [], isTimed = true, gameActive = false, isPaused = false, timerInterval;
         let currentLevel = 1, timeLeft = 20;
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        let bgmSource = null, bgmGain = null;
         let musicPlaying = false;
+        const caveNotes = [220, 261, 329, 392, 440, 329, 261, 220]; // Arpeggio caverna
+        let noteStep = 0;
 
-        function getVpWidth() { return window.visualViewport ? window.visualViewport.width : window.innerWidth; }
-        function getVpHeight() { return window.visualViewport ? window.visualViewport.height : window.innerHeight; }
+        function playCaveMusic() {
+            if (!musicPlaying) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(caveNotes[noteStep % caveNotes.length], audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.8);
+            noteStep++;
+            setTimeout(playCaveMusic, 600);
+        }
+
+        function toggleMusic() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            musicPlaying = !musicPlaying;
+            document.getElementById('music-toggle').style.opacity = musicPlaying ? "1" : "0.3";
+            if (musicPlaying) playCaveMusic();
+        }
 
         function playSfx(type) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -90,37 +109,16 @@
                 gain.gain.setValueAtTime(0.7, audioCtx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
             } else if (type === 'gameover') {
-                [440, 330, 220, 110].forEach((freq, i) => {
-                    const o = audioCtx.createOscillator();
-                    const g = audioCtx.createGain();
-                    o.type = 'square';
-                    o.frequency.setValueAtTime(freq, audioCtx.currentTime + (i * 0.15));
-                    g.gain.setValueAtTime(0.3, audioCtx.currentTime + (i * 0.15));
-                    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + (i * 0.15) + 0.15);
+                [440, 392, 330, 261, 196].forEach((f, i) => {
+                    const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+                    o.type = 'square'; o.frequency.setValueAtTime(f, audioCtx.currentTime + i*0.1);
+                    g.gain.setValueAtTime(0.4, audioCtx.currentTime + i*0.1);
+                    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + i*0.1 + 0.1);
                     o.connect(g); g.connect(audioCtx.destination);
-                    o.start(audioCtx.currentTime + (i * 0.15)); o.stop(audioCtx.currentTime + (i * 0.15) + 0.15);
-                });
-                return;
+                    o.start(audioCtx.currentTime + i*0.1); o.stop(audioCtx.currentTime + i*0.1 + 0.1);
+                }); return;
             }
             osc.start(); osc.stop(audioCtx.currentTime + 0.5);
-        }
-
-        function toggleMusic() {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            if (musicPlaying) {
-                if (bgmSource) bgmSource.stop();
-                musicPlaying = false;
-            } else {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-                osc.connect(gain); gain.connect(audioCtx.destination);
-                osc.start();
-                bgmSource = osc;
-                musicPlaying = true;
-            }
         }
 
         async function startGame(timed) {
@@ -141,18 +139,12 @@
         }
 
         function init() {
-            if (engine) Composite.clear(engine.world, false);
-            if (render) Render.stop(render);
-            if (runner) Runner.stop(runner);
-            
-            const w = getVpWidth(), h = getVpHeight();
+            if (engine) { Composite.clear(engine.world, false); Runner.stop(runner); Render.stop(render); }
+            const w = window.innerWidth, h = window.innerHeight;
             engine = Engine.create(); engine.gravity.x = 0; engine.gravity.y = 0;
-            render = Render.create({ element: document.getElementById('game-container'), engine: engine, options: { width: w, height: h, wireframes: false, background: 'transparent', pixelRatio: window.devicePixelRatio } });
-            
-            addBall();
-            spawnLevel(w, h);
-            Render.run(render);
-            runner = Runner.create(); Runner.run(runner, engine);
+            render = Render.create({ element: document.getElementById('game-container'), engine: engine, options: { width: w, height: h, wireframes: false, background: 'transparent' } });
+            addBall(); spawnLevel(w, h);
+            Render.run(render); runner = Runner.create(); Runner.run(runner, engine);
             gameActive = true;
             if (isTimed) startTimer();
 
@@ -180,9 +172,8 @@
         }
 
         function addBall() {
-            const ball = Bodies.circle(getVpWidth()/2, getVpHeight()/2, 12, { restitution: 0.8, friction: 0, frictionAir: 0, label: 'ball', render: { fillStyle: '#ffffff' } });
-            balls = [ball];
-            Composite.add(engine.world, ball);
+            const ball = Bodies.circle(window.innerWidth/2, window.innerHeight/2, 12, { restitution: 0.8, friction: 0, frictionAir: 0, label: 'ball', render: { fillStyle: '#ffffff' } });
+            balls = [ball]; Composite.add(engine.world, ball);
         }
 
         function spawnLevel(w, h) {
@@ -198,12 +189,11 @@
 
         function triggerVoidEffect() {
             document.body.style.setProperty('--bg-color', `hsl(${Math.random()*360}, 40%, 5%)`);
-            engine.world.bodies.filter(b => b.label === 'brick').forEach(b => Body.setPosition(b, { x: 50 + Math.random()*(getVpWidth()-100), y: 160 + Math.random()*(getVpHeight()-280) }));
+            engine.world.bodies.filter(b => b.label === 'brick').forEach(b => Body.setPosition(b, { x: 50 + Math.random()*(window.innerWidth-100), y: 160 + Math.random()*(window.innerHeight-280) }));
         }
 
         function togglePause() {
-            isPaused = !isPaused;
-            engine.enabled = !isPaused;
+            isPaused = !isPaused; engine.enabled = !isPaused;
             document.getElementById('pause-menu').style.display = isPaused ? 'flex' : 'none';
         }
 
@@ -211,16 +201,15 @@
             clearInterval(timerInterval);
             timerInterval = setInterval(() => { timeLeft--; document.getElementById('timer-display').innerText = timeLeft; if (timeLeft <= 0) gameOver(); }, 1000); 
         }
+
         function levelWin() { 
             currentLevel++; 
-            if (currentLevel % 5 === 0) {
-                addBall();
-                playSfx('bonus');
-            }
+            if (currentLevel % 5 === 0) { addBall(); playSfx('bonus'); }
             if (isTimed) timeLeft += Math.max(2, 12 - currentLevel); 
             document.getElementById('lvl-num').innerText = currentLevel; 
-            spawnLevel(getVpWidth(), getVpHeight()); 
+            spawnLevel(window.innerWidth, window.innerHeight); 
         }
+
         function gameOver() {
             gameActive = false; clearInterval(timerInterval); Runner.stop(runner);
             playSfx('gameover');
