@@ -49,7 +49,6 @@
         <div id="game-over" class="menu" style="display:none;">
             <h1 style="color: #ff3b30; letter-spacing: 8px;">Time Out</h1>
             <div id="final-score" class="stat-value">0</div>
-            <div style="font-size: 0.8rem; opacity: 0.5; letter-spacing: 3px;">Best Record</div>
             <div id="high-score" class="stat-value">0</div>
             <button onclick="location.reload()">Retry</button>
         </div>
@@ -69,6 +68,7 @@
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.connect(gain); gain.connect(audioCtx.destination);
+            
             if (type === 'hit') {
                 osc.frequency.setValueAtTime(440, audioCtx.currentTime);
                 gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
@@ -83,7 +83,8 @@
             osc.start(); osc.stop(audioCtx.currentTime + 0.2);
         }
 
-        function startGame(timed) {
+        async function startGame(timed) {
+            try { await document.documentElement.requestFullscreen(); } catch (e) {}
             isTimed = timed;
             if (!isTimed) document.getElementById('timer-display').style.display = 'none';
             document.getElementById('overlay').style.display = 'none';
@@ -95,9 +96,9 @@
             const w = getVpWidth(), h = getVpHeight();
             engine = Engine.create(); engine.gravity.x = 0; engine.gravity.y = 0;
             render = Render.create({ element: document.getElementById('game-container'), engine: engine, options: { width: w, height: h, wireframes: false, background: 'transparent', pixelRatio: window.devicePixelRatio } });
+            
             addBall();
             spawnLevel(w, h);
-            Composite.add(engine.world, balls);
             Render.run(render);
             runner = Runner.create(); Runner.run(runner, engine);
             gameActive = true;
@@ -120,7 +121,7 @@
                         playSfx(b.label === 'void_brick' ? 'void' : 'hit');
                         if (b.label === 'void_brick') triggerVoidEffect();
                         Composite.remove(engine.world, b);
-                        if (engine.world.bodies.filter(b => b.label.includes('brick')).length === 0) levelWin();
+                        if (engine.world.bodies.filter(body => body.label.includes('brick')).length === 0) levelWin();
                     }
                 });
             });
@@ -136,7 +137,6 @@
             const colors = ['#FF3B30', '#FFCC00', '#34C759', '#007AFF', '#AF52DE'];
             for(let i = 0; i < 6 + currentLevel; i++) {
                 const isVoid = (i < 2 && Math.random() > 0.7);
-                // Math.floor applied to ensure integer coordinates for crisp rendering
                 Composite.add(engine.world, Bodies.rectangle(Math.floor(50 + Math.random()*(w-100)), Math.floor(160 + Math.random()*(h-280)), 65, 28, {
                     isStatic: true, label: isVoid ? 'void_brick' : 'brick', chamfer: { radius: 6 },
                     render: { fillStyle: isVoid ? 'transparent' : colors[i%colors.length], strokeStyle: isVoid ? '#fff' : 'transparent', lineWidth: isVoid ? 2 : 0 }
@@ -165,10 +165,7 @@
         }
         function gameOver() {
             gameActive = false; clearInterval(timerInterval); Runner.stop(runner);
-            const record = localStorage.getItem('tilt-smash-record') || 0;
-            if (currentLevel-1 > record) localStorage.setItem('tilt-smash-record', currentLevel-1);
-            document.getElementById('final-score').innerText = currentLevel-1;
-            document.getElementById('high-score').innerText = localStorage.getItem('tilt-smash-record');
+            document.getElementById('final-score').innerText = "Level: " + currentLevel;
             document.getElementById('game-over').style.display = 'flex';
         }
 
