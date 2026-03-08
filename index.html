@@ -169,7 +169,7 @@
         function startTimer() { timerInterval = setInterval(() => { timeLeft--; document.getElementById('timer-display').innerText = timeLeft; if (timeLeft <= 0) gameOver(); }, 1000); }
         function levelWin() { 
             currentLevel++; 
-            if (currentLevel % 4 === 0) {
+            if (currentLevel % 5 === 0) {
                 addBall();
                 playSfx('bonus');
             }
