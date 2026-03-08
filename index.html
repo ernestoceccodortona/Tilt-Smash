@@ -18,6 +18,7 @@
         #timer-display { font-size: 3.5rem; font-weight: 200; letter-spacing: 4px; line-height: 1; }
         
         #pause-btn { position: absolute; top: 20px; left: 20px; z-index: 20; padding: 10px 20px; background: #333; border-radius: 20px; pointer-events: auto; cursor: pointer; font-size: 0.7rem; letter-spacing: 2px; }
+        #music-toggle { position: absolute; top: 20px; right: 20px; z-index: 20; width: 40px; height: 40px; background: #333; border-radius: 50%; pointer-events: auto; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
 
         .menu { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #000; z-index: 100; text-align: center; pointer-events: auto; }
         h1 { font-weight: 100; letter-spacing: 12px; margin-bottom: 40px; text-transform: uppercase; }
@@ -33,6 +34,7 @@
             <div id="timer-display">20</div>
         </div>
         <div id="pause-btn" style="display:none;" onclick="togglePause()">PAUSE</div>
+        <div id="music-toggle" onclick="toggleMusic()">♪</div>
 
         <div id="overlay" class="menu">
             <h1>TILT PONG</h1>
@@ -49,7 +51,8 @@
         <div id="game-over" class="menu" style="display:none;">
             <h1 style="color: #ff3b30; letter-spacing: 8px;">Time Out</h1>
             <div id="final-score" class="stat-value">0</div>
-            <button onclick="location.reload()">Retry</button>
+            <button onclick="resetGame()">Retry</button>
+            <button onclick="location.reload()">Quit</button>
         </div>
     </div>
 
@@ -58,6 +61,8 @@
         let engine, render, runner, balls = [], isTimed = true, gameActive = false, isPaused = false, timerInterval;
         let currentLevel = 1, timeLeft = 20;
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let bgmSource = null, bgmGain = null;
+        let musicPlaying = false;
 
         function getVpWidth() { return window.visualViewport ? window.visualViewport.width : window.innerWidth; }
         function getVpHeight() { return window.visualViewport ? window.visualViewport.height : window.innerHeight; }
@@ -85,13 +90,37 @@
                 gain.gain.setValueAtTime(0.7, audioCtx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
             } else if (type === 'gameover') {
-                osc.type = 'square';
-                osc.frequency.setValueAtTime(200, audioCtx.currentTime);
-                osc.frequency.linearRampToValueAtTime(50, audioCtx.currentTime + 0.5);
-                gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+                [440, 330, 220, 110].forEach((freq, i) => {
+                    const o = audioCtx.createOscillator();
+                    const g = audioCtx.createGain();
+                    o.type = 'square';
+                    o.frequency.setValueAtTime(freq, audioCtx.currentTime + (i * 0.15));
+                    g.gain.setValueAtTime(0.3, audioCtx.currentTime + (i * 0.15));
+                    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + (i * 0.15) + 0.15);
+                    o.connect(g); g.connect(audioCtx.destination);
+                    o.start(audioCtx.currentTime + (i * 0.15)); o.stop(audioCtx.currentTime + (i * 0.15) + 0.15);
+                });
+                return;
             }
             osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+        }
+
+        function toggleMusic() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            if (musicPlaying) {
+                if (bgmSource) bgmSource.stop();
+                musicPlaying = false;
+            } else {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start();
+                bgmSource = osc;
+                musicPlaying = true;
+            }
         }
 
         async function startGame(timed) {
@@ -103,7 +132,19 @@
             init();
         }
 
+        function resetGame() {
+            document.getElementById('game-over').style.display = 'none';
+            currentLevel = 1; timeLeft = 20;
+            document.getElementById('lvl-num').innerText = currentLevel;
+            document.getElementById('timer-display').innerText = timeLeft;
+            init();
+        }
+
         function init() {
+            if (engine) Composite.clear(engine.world, false);
+            if (render) Render.stop(render);
+            if (runner) Runner.stop(runner);
+            
             const w = getVpWidth(), h = getVpHeight();
             engine = Engine.create(); engine.gravity.x = 0; engine.gravity.y = 0;
             render = Render.create({ element: document.getElementById('game-container'), engine: engine, options: { width: w, height: h, wireframes: false, background: 'transparent', pixelRatio: window.devicePixelRatio } });
@@ -140,7 +181,7 @@
 
         function addBall() {
             const ball = Bodies.circle(getVpWidth()/2, getVpHeight()/2, 12, { restitution: 0.8, friction: 0, frictionAir: 0, label: 'ball', render: { fillStyle: '#ffffff' } });
-            balls.push(ball);
+            balls = [ball];
             Composite.add(engine.world, ball);
         }
 
@@ -166,7 +207,10 @@
             document.getElementById('pause-menu').style.display = isPaused ? 'flex' : 'none';
         }
 
-        function startTimer() { timerInterval = setInterval(() => { timeLeft--; document.getElementById('timer-display').innerText = timeLeft; if (timeLeft <= 0) gameOver(); }, 1000); }
+        function startTimer() { 
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => { timeLeft--; document.getElementById('timer-display').innerText = timeLeft; if (timeLeft <= 0) gameOver(); }, 1000); 
+        }
         function levelWin() { 
             currentLevel++; 
             if (currentLevel % 5 === 0) {
