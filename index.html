@@ -277,7 +277,7 @@ async function resetGame() {
         function levelWin() { currentLevel++; if (currentLevel % 5 === 0) { addBall(); playSfx('bonus'); } if (isTimed) timeLeft += Math.max(2, 12 - currentLevel); document.getElementById('lvl-num').innerText = currentLevel; spawnLevel(getVpWidth(), getVpHeight()); }
         function gameOver() { gameActive = false; clearInterval(timerInterval); Runner.stop(runner); stopBGM(); playSfx('gameover'); document.getElementById('final-score').innerText = "Level: " + currentLevel; document.getElementById('game-over').style.display = 'flex'; }
         
-        window.addEventListener('devicemotion', (e) => { if (gameActive && !isPaused) { engine.gravity.x = -e.accelerationIncludingGravity.x * 0.6; engine.gravity.y = e.accelerationIncludingGravity.y * 0.6; } });
+        window.addEventListener('devicemotion', (e) => { if (gameActive && !isPaused) { engine.gravity.x = -e.accelerationIncludingGravity.x * 0.8; engine.gravity.y = e.accelerationIncludingGravity.y * 0.8; } });
     </script>
 </body>
 </html>
