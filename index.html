@@ -59,6 +59,11 @@
     </div>
 
     <script>
+
+        // Aggiungi questa variabile di controllo in cima al tuo script
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+
         const { Engine, Render, Runner, Bodies, Composite, Events, Body } = Matter;
         let engine, render, runner, balls = [], isTimed = true, gameActive = false, isPaused = false, timerInterval;
         let currentLevel = 1, timeLeft = 20;
@@ -188,15 +193,41 @@ async function resetGame() {
         }
 
         async function startGame(timed) {
-            await audioCtx.resume();
-            try { await document.documentElement.requestFullscreen(); } catch (e) {}
-            isTimed = timed;
-            if (!isTimed) document.getElementById('timer-display').style.display = 'none';
-            document.getElementById('overlay').style.display = 'none';
-            document.getElementById('pause-btn').style.display = 'block';
-            if(musicOn) startBGM();
-            init();
+    // 1. Gestione Audio Context (Essenziale per iOS)
+    if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+    }
+
+    // 2. Richiesta Permessi Giroscopio (Solo iOS)
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        try {
+            const permissionState = await DeviceMotionEvent.requestPermission();
+            if (permissionState !== 'granted') {
+                console.log("Permesso giroscopio negato");
+            }
+        } catch (e) {
+            console.error("Errore permessi sensori:", e);
         }
+    }
+
+    // 3. Fullscreen (Solo se è supportato, evita errori su iOS)
+    if (document.documentElement.requestFullscreen) {
+        try { await document.documentElement.requestFullscreen(); } catch (e) { console.log("Fullscreen negato"); }
+    }
+
+    // 4. Avvio logica
+    isTimed = timed;
+    if (!isTimed) document.getElementById('timer-display').style.display = 'none';
+    document.getElementById('overlay').style.display = 'none';
+    document.getElementById('pause-btn').style.display = 'block';
+    
+    // Avvia la musica solo DOPO che il contesto audio è attivo
+    if (musicOn) {
+        startBGM();
+    }
+    
+    init();
+}
 
         function init() {
             const w = getVpWidth(), h = getVpHeight();
@@ -277,7 +308,15 @@ async function resetGame() {
         function levelWin() { currentLevel++; if (currentLevel % 5 === 0) { addBall(); playSfx('bonus'); } if (isTimed) timeLeft += Math.max(2, 12 - currentLevel); document.getElementById('lvl-num').innerText = currentLevel; spawnLevel(getVpWidth(), getVpHeight()); }
         function gameOver() { gameActive = false; clearInterval(timerInterval); Runner.stop(runner); stopBGM(); playSfx('gameover'); document.getElementById('final-score').innerText = "Level: " + currentLevel; document.getElementById('game-over').style.display = 'flex'; }
         
-        window.addEventListener('devicemotion', (e) => { if (gameActive && !isPaused) { engine.gravity.x = -e.accelerationIncludingGravity.x * 0.8; engine.gravity.y = e.accelerationIncludingGravity.y * 0.8; } });
+        window.addEventListener('devicemotion', (e) => {
+    if (gameActive && !isPaused) {
+        // Se è iOS, invertiamo il segno per allinearlo ad Android
+        const multiplier = isIOS ? -1 : 1; 
+        
+        engine.gravity.x = multiplier * (-e.accelerationIncludingGravity.x * 0.8);
+        engine.gravity.y = multiplier * (e.accelerationIncludingGravity.y * 0.8);
+    }
+});
     </script>
 </body>
 </html>
